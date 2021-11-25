@@ -23,6 +23,10 @@ const DEFAULT_SETTINGS: JupyterPluginSettings = {
 	setupScript: '',
 }
 
+enum LANGUAGE_TYPES {
+	PYTHON = 'python3',
+	RUST = 'rust'
+}
 
 class JupyterClient {
 	process: ChildProcess;
@@ -89,6 +93,20 @@ export default class JupyterPlugin extends Plugin {
 		await MarkdownRenderer.renderMarkdown('```python\n' + src + '```', el, '',
 											  this.app.workspace.activeLeaf.view);
 
+		this.commonPostProcessor(src, el, ctx, LANGUAGE_TYPES.PYTHON);
+	}
+
+	async rustPostProcessor(src: string, el: HTMLElement, ctx: MarkdownPostProcessorContext) {
+		await MarkdownRenderer.renderMarkdown('```rust\n' + src + '```', el, '',
+											  this.app.workspace.activeLeaf.view);
+
+		this.commonPostProcessor(src, el, ctx, LANGUAGE_TYPES.RUST);
+	}
+
+	async commonPostProcessor(src: string, el: HTMLElement, ctx: MarkdownPostProcessorContext, lang: LANGUAGE_TYPES) {
+		// Don't have a setup script for Rust just yet so we are doing a simple check here first
+		let setupScript: string = lang === LANGUAGE_TYPES.PYTHON ? this.settings.setupScript : "";
+
 		// Needed for positioning of the button and hiding Jupyter prompts.
 		el.classList.add('obsidian-jupyter');
 		// Add a button to run the code.
@@ -101,7 +119,8 @@ export default class JupyterPlugin extends Plugin {
 			button.innerText = 'Running...';
 			this.getJupyterClient(ctx).request({
 				command: 'execute',
-				source: `${this.settings.setupScript}\n${src}`,
+				source: `${setupScript}\n${src}`,
+				lang
 			}).then(response => {
 				// Find the div to paste the output into or create it if necessary.
 				let output = el.querySelector('div.obsidian-jupyter-output');
@@ -150,6 +169,7 @@ export default class JupyterPlugin extends Plugin {
 
 		this.addSettingTab(new JupyterSettingTab(this.app, this));
 		this.registerMarkdownCodeBlockProcessor('jupyter', this.postprocessor.bind(this));
+		this.registerMarkdownCodeBlockProcessor('jupyter-rust', this.rustPostProcessor.bind(this));
 	}
 
 	async downloadPythonScript() {

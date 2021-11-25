@@ -1,5 +1,6 @@
 import argparse
 import sys
+from enum import Enum
 from jupyter_client import KernelManager
 import nbformat
 from nbconvert import HTMLExporter
@@ -8,6 +9,9 @@ from nbclient.exceptions import CellExecutionError
 import json
 import logging
 
+class Kernel(Enum):
+    PYTHON = 'python3'
+    RUST = 'rust'
 
 # Parse input arguments.
 parser = argparse.ArgumentParser()
@@ -19,10 +23,13 @@ logging.basicConfig(level='INFO')
 logger = logging.getLogger('obsidian-jupyter')
 logger.info('started server for document %s', args.document_id)
 
+# Keep cache of currently selected kernel - defaulted to Python
+kernel = Kernel.PYTHON.value
+
 # Create a notebook and kernel.
 cell = nbformat.v4.new_code_cell()
 nb = nbformat.v4.new_notebook(cells=[cell])
-km = KernelManager()
+km = KernelManager(kernel_name=kernel)
 client = NotebookClient(nb, km)
 
 # Use line buffering.
@@ -38,8 +45,17 @@ try:
         response = {
             'id': request['id'],
         }
+
         # Execute a cell.
         if request_body['command'] == 'execute':
+            # Change Kernel, if necessary
+            # This is VERY redundant - figure out how to use MultiKernelManager
+            kernel_value = Kernel(request_body['lang']).value
+            if kernel != kernel_value:
+                kernel = kernel_value
+                km = KernelManager(kernel_name=kernel)
+                client = NotebookClient(nb, km)
+
             cell['source'] = request_body['source']
             try:
                 nb = client.execute(nb)
